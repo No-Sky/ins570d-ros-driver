@@ -3,6 +3,8 @@
   <node pkg="ins570d" type="ins570d_node" name="ins570d_node" required="true" output="screen">
     <param name="port" value="/dev/ttyUSB0"/>
     <param name="buadrate" type="int" value="230400"/>
+    <param name="frame_id" type="str" value="base_link"/>
+    <param name="broadcast_tf" type="bool" value="false"/>
   </node>
 
   <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ins570d)/rviz/demo.rviz" required="true"/>

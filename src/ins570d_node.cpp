@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
   ros::ServiceServer service =
       nh.advertiseService("set_zero_orientation", set_zero_orientation);
 
-  ros::Rate r(100); // 100 hz
+  ros::Rate r(200); // 200 hz
 
   sensor_msgs::Imu imu;
 
@@ -114,9 +114,8 @@ int main(int argc, char **argv) {
                     "characters of old input.",
                     (int)read.size(), (int)input.size());
           input += read;
-          while (input.length() >=
-                 Length) // while there might be a complete package in input
-          {
+          // while there might be a complete package in input
+          while (input.length() >= Length) {
             // parse for data packets
             data_packet_start = input.find(0xBD);
 
@@ -131,9 +130,8 @@ int main(int argc, char **argv) {
                   // pack+=input[data_packet_start+i];
                 }
 
-                if (input[data_packet_start + Length - 1] ==
-                    xorcheck) // input[data_packet_start +Length-1]==xorcheck
-                {
+                // input[data_packet_start +Length-1]==xorcheck
+                if (input[data_packet_start + Length - 1] == xorcheck) {
                   // ROS_DEBUG("seems to be a real data package: long enough and
                   // found end characters");
                   // printf("initialDATA:%x \n",input[data_packet_start+2]);
@@ -234,8 +232,8 @@ int main(int argc, char **argv) {
                   tempA = (int *)&altitude;
                   double altitudef = *tempA * 1e-3L;
 
-                  ROS_INFO("latitude: %f, longitude: %f, altitude: %f", latitudef, longitudef, altitudef);
-
+                  ROS_INFO("latitude: %f, longitude: %f, altitude: %f",
+                           latitudef, longitudef, altitudef);
 
                   short int northSpeed =
                       ((0xff & (char)input[data_packet_start + 34]) << 8) |
@@ -248,24 +246,25 @@ int main(int argc, char **argv) {
                       (0xff & (char)input[data_packet_start + 37]);
 
                   temp = (short int *)&northSpeed;
-                  float northSpeedf = (*temp) * 1e2/32768;
+                  float northSpeedf = (*temp) * 1e2 / 32768;
                   temp = (short int *)&eastSpeed;
-                  float eastSpeedf = (*temp) * 1e2/32768;
+                  float eastSpeedf = (*temp) * 1e2 / 32768;
                   temp = (short int *)&groundSpeed;
-                  float groundSpeedf = (*temp) * 1e2/32768;
+                  float groundSpeedf = (*temp) * 1e2 / 32768;
 
-                  ROS_INFO("northSpeed: %f, eastSpeef: %f, groundSpeed: %f", northSpeedf, eastSpeedf, groundSpeedf);
+                  ROS_INFO("northSpeed: %f, eastSpeef: %f, groundSpeed: %f",
+                           northSpeedf, eastSpeedf, groundSpeedf);
 
                   char polling = (0xff & (char)input[data_packet_start + 56]);
                   double temperaturef;
                   if (polling == 22) {
-                      short int temperature =
+                    short int temperature =
                         ((0xff & (char)input[data_packet_start + 47]) << 8) |
                         (0xff & (char)input[data_packet_start + 46]);
 
                     temp = (short int *)&temperature;
                     temperaturef = (*temp) * 200 / 32768;
-                      
+
                     ROS_INFO("temperature: %f", temperaturef);
                   }
 
@@ -300,7 +299,7 @@ int main(int argc, char **argv) {
 
                   // publish gps message
                   gps_msg.header.stamp = measurement_time;
-                  gps_msg.header.frame_id = "navsat_link";
+                  gps_msg.header.frame_id = "world";
                   if (abs(gps_msg.altitude - altitudef) > 100) {
                     input.erase(0, data_packet_start + 1);
                     continue;
@@ -343,9 +342,7 @@ int main(int argc, char **argv) {
             }
           }
         }
-      }
-
-      else {
+      } else {
         // try and open the serial port
         try {
           ser.setPort(port);
@@ -372,5 +369,4 @@ int main(int argc, char **argv) {
     ros::spinOnce();
     r.sleep();
   }
-  // outfile.close();
 }
