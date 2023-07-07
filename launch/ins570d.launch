@@ -1,0 +1,10 @@
+<launch>
+
+  <node pkg="ins570d" type="ins570d_node" name="ins570d_node" required="true" output="screen">
+    <param name="port" value="/dev/ttyUSB0"/>
+    <param name="buadrate" type="int" value="230400"/>
+  </node>
+
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ins570d)/rviz/demo.rviz" required="true"/>
+
+</launch>
