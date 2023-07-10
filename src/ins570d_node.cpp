@@ -47,9 +47,9 @@ int main(int argc, char **argv) {
   private_node_handle.param<std::string>("port", port, "/dev/ttyUSB0");
   private_node_handle.param<int>("buadrate", buadrate, 230400);
   private_node_handle.param<std::string>("tf_parent_frame_id",
-                                         tf_parent_frame_id, "imu_base");
+                                         tf_parent_frame_id, "world");
   private_node_handle.param<std::string>("tf_frame_id", tf_frame_id,
-                                         "imu_link");
+                                         "base_link");
   private_node_handle.param<std::string>("frame_id", frame_id, "imu_link");
   private_node_handle.param<double>("time_offset_in_seconds",
                                     time_offset_in_seconds, 0.0);
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
       nh.advertise<sensor_msgs::Temperature>("temperature", 100);
   ros::Publisher imu_gps_pub = nh.advertise<sensor_msgs::NavSatFix>("gps", 100);
   ros::Publisher trigger_time_pub =
-      nh.advertise<sensor_msgs::TimeReference>("trigger_time", 100); ////
+      nh.advertise<sensor_msgs::TimeReference>("trigger_time", 100);
 
   ros::ServiceServer service =
       nh.advertiseService("set_zero_orientation", set_zero_orientation);
@@ -148,30 +148,18 @@ int main(int argc, char **argv) {
                       (0xff & (char)input[data_packet_start + 7]);
 
                   // calculate RPY in rad
+                  // 将y右z下转y左z上 * -1.0
                   short int *temp = (short int *)&roll;
                   float rollf = (*temp) * (360.0 / 32768) * (M_PI / 180.0);
                   temp = (short int *)&pitch;
-                  float pitchf = (*temp) * (360.0 / 32768) * (M_PI / 180.0);
+                  float pitchf =
+                      (*temp) * (360.0 / 32768) * (M_PI / 180.0) * -1.0;
                   temp = (short int *)&yaw;
-                  float yawf = (*temp) * (360.0 / 32768) * (M_PI / 180.0);
-
-                  // tf::Quaternion orientation(xf, yf, zf, wf);
-                  tf::Quaternion orientation;
-                  orientation =
-                      tf::createQuaternionFromRPY(rollf, -pitchf, -yawf);
-
-                  if (!zero_orientation_set) {
-                    zero_orientation = orientation;
-                    zero_orientation_set = true;
-                  }
-
-                  // http://answers.ros.org/question/10124/relative-rotation-between-two-quaternions/
-                  tf::Quaternion differential_rotation;
-                  differential_rotation =
-                      zero_orientation.inverse() * orientation;
+                  float yawf =
+                      (*temp) * (360.0 / 32768) * (M_PI / 180.0) * -1.0;
 
                   // get gyro values
-
+                  // unit deg/s
                   short int gx =
                       ((0xff & (char)input[data_packet_start + 10]) << 8) |
                       (0xff & (char)input[data_packet_start + 9]);
@@ -181,13 +169,14 @@ int main(int argc, char **argv) {
                   short int gz =
                       ((0xff & (char)input[data_packet_start + 14]) << 8) |
                       (0xff & (char)input[data_packet_start + 13]);
-
+                  // cal unit from deg/s to rad/s
+                  // 将y右z下转y左z上 * -1.0
                   temp = (short int *)&gx;
-                  float gxf = (*temp) * 300.0 / 32768;
+                  float gxf = (*temp) * 300.0 / 32768 * (M_PI / 180.0);
                   temp = (short int *)&gy;
-                  float gyf = (*temp) * 300.0 / 32768;
+                  float gyf = (*temp) * 300.0 / 32768 * (M_PI / 180.0) * -1.0;
                   temp = (short int *)&gz;
-                  float gzf = (*temp) * 300.0 / 32768;
+                  float gzf = (*temp) * 300.0 / 32768 * (M_PI / 180.0) * -1.0;
 
                   // get acelerometer values
                   short int ax =
@@ -200,13 +189,14 @@ int main(int argc, char **argv) {
                       ((0xff & (char)input[data_packet_start + 20]) << 8) |
                       (0xff & (char)input[data_packet_start + 19]);
 
-                  // calculate accelerations in m/s²
+                  // calculate accelerations unit from g to m/s²
+                  // 将y右z下转y左z上 * -1.0
                   temp = (short int *)&ax;
-                  float axf = *temp * 12.0 / 32768;
+                  float axf = *temp * 12.0 / 32768 * 9.80665;
                   temp = (short int *)&ay;
-                  float ayf = *temp * 12.0 / 32768;
+                  float ayf = *temp * 12.0 / 32768 * 9.80665 * -1.0;
                   temp = (short int *)&az;
-                  float azf = *temp * 12.0 / 32768;
+                  float azf = *temp * 12.0 / 32768 * 9.80665 * -1.0;
 
                   // get gps values
                   int latitude =
@@ -274,6 +264,21 @@ int main(int argc, char **argv) {
                   ros::Time measurement_time =
                       ros::Time::now() + ros::Duration(time_offset_in_seconds);
 
+                  // tf::Quaternion orientation(xf, yf, zf, wf);
+                  tf::Quaternion orientation;
+                  orientation =
+                      tf::createQuaternionFromRPY(rollf, pitchf, yawf);
+
+                  if (!zero_orientation_set) {
+                    zero_orientation = orientation;
+                    zero_orientation_set = true;
+                  }
+
+                  // http://answers.ros.org/question/10124/relative-rotation-between-two-quaternions/
+                  tf::Quaternion differential_rotation;
+                  differential_rotation =
+                      zero_orientation.inverse() * orientation;
+
                   // publish imu message
                   imu.header.stamp = measurement_time;
                   imu.header.frame_id = frame_id;
@@ -300,7 +305,14 @@ int main(int argc, char **argv) {
                   // publish gps message
                   gps_msg.header.stamp = measurement_time;
                   gps_msg.header.frame_id = "world";
-                  if (abs(gps_msg.altitude - altitudef) > 100) {
+                  gps_msg.position_covariance[0] = 18446746124288.0;
+                  gps_msg.position_covariance[4] = 18446746124288.0;
+                  gps_msg.position_covariance[8] = 14062673985536.0;
+                  gps_msg.position_covariance_type = 2;
+                  if ((gps_msg.longitude != 0.0 && gps_msg.latitude != 0.0) &&
+                      (abs(gps_msg.altitude - altitudef) > 20 ||
+                       abs(gps_msg.longitude - longitudef) > 20 ||
+                       abs(gps_msg.latitude - latitudef) > 20)) {
                     input.erase(0, data_packet_start + 1);
                     continue;
                   } else {
